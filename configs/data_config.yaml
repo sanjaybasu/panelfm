@@ -1,0 +1,73 @@
+# Data configuration for PanelFM
+data_root: ${DATA_ROOT:-./data/real_inputs}  # Set DATA_ROOT env var or place data here
+
+# Source tables
+tables:
+  outcomes: outcomes_monthly.csv
+  attributes: member_attributes.csv
+  eligibility: eligibility.csv
+  hospital_visits: hospital_visits.csv
+  interventions: interventions.csv
+  id_map: id_map.csv
+  member_patient_map: member_patient_map.csv
+
+# Column mappings
+columns:
+  patient_id: person_id
+  time_col: month_year
+
+  # Targets
+  targets:
+    - total_paid
+    - emergency_department_ct
+    - acute_inpatient_ct
+    - pharmacy_paid
+    - medical_paid
+
+  # Binary outcome: top-10% total_paid in prediction window
+  high_cost_percentile: 0.90
+
+  # Cross-sectional features (from attributes + eligibility)
+  demographic_features:
+    - gender
+    - race
+    - ethnicity
+    - birth_date  # → age
+    - dual_eligible
+    - risk_score
+
+  enrollment_features:
+    - payer
+    - state
+    - enrolled_days
+
+  utilization_features:
+    # Computed from lookback window of outcomes_monthly
+    - mean_total_paid
+    - max_total_paid
+    - std_total_paid
+    - mean_ed_visits
+    - total_ed_visits
+    - mean_ip_admits
+    - total_ip_admits
+    - mean_outpatient
+    - mean_telehealth
+    - months_with_any_ed
+    - months_with_any_ip
+    - cost_trend_slope  # linear trend in total_paid over lookback
+
+  intervention_features:
+    - ever_targeted
+    - ever_activated
+
+# Temporal configuration
+temporal:
+  # Determine from data; these are defaults
+  min_history_months: 6   # Minimum months of history required per patient
+  lookback_months: 12     # Max lookback for feature engineering
+  forecast_horizons: [3, 6]  # Predict 3 and 6 months ahead
+
+# Panel filters
+filters:
+  min_enrolled_days_per_month: 15  # Exclude months with <15 enrolled days
+  min_total_months: 9              # Exclude patients with <9 total months

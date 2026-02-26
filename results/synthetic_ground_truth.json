@@ -1,0 +1,13 @@
+{
+  "ar1_coefficient": 0.15,
+  "treatment_effect_log": -0.1,
+  "age_effect_log": 0.015,
+  "dual_effect_log": 0.4,
+  "random_intercept_std": 0.8,
+  "comorbidity_effects": [
+    0.3385874229434663,
+    0.24127716795790516,
+    0.4886393088116299
+  ],
+  "seasonal_amplitude": 0.05
+}

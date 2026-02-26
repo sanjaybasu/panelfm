@@ -1,0 +1,40 @@
+# Experiment configuration
+
+experiment:
+  name: "panelfm_claims_risk"
+  seed: 42
+  n_jobs: -1  # parallel jobs for sklearn
+
+# Evaluation metrics
+metrics:
+  regression:
+    - mae
+    - rmse
+    - mape
+    - crps
+    - quantile_loss_50
+    - quantile_loss_90
+    - quantile_loss_99
+  classification:
+    - auroc
+    - auprc
+    - sensitivity_at_90spec
+    - ppv_at_top5pct
+    - nri_vs_xgboost
+  panel:
+    - between_r2
+    - within_r2
+    - total_r2
+  equity:
+    stratify_by:
+      - race
+      - dual_eligible
+    equity_metrics:
+      - auroc
+      - calibration_slope
+
+# Results output
+output:
+  results_dir: results/
+  figures_dir: results/figures/
+  tables_dir: results/tables/

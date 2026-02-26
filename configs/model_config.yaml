@@ -1,0 +1,108 @@
+# Model configuration for PanelFM experiments
+
+# =============================================================================
+# BASELINES: Cross-Sectional ML
+# =============================================================================
+xgboost:
+  n_estimators: 500
+  max_depth: 6
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 10
+  reg_alpha: 0.1
+  reg_lambda: 1.0
+  objective_regression: "reg:squarederror"
+  objective_classification: "binary:logistic"
+  eval_metric_regression: "mae"
+  eval_metric_classification: "auprc"
+  early_stopping_rounds: 50
+
+random_forest:
+  n_estimators: 500
+  max_depth: 12
+  min_samples_leaf: 20
+  max_features: "sqrt"
+
+lightgbm:
+  n_estimators: 500
+  max_depth: 6
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_samples: 20
+  reg_alpha: 0.1
+  reg_lambda: 1.0
+
+stacking:
+  meta_learner: "logistic"  # logistic regression meta-learner
+  cv_folds: 5
+  base_models: ["xgboost", "random_forest", "lightgbm"]
+
+# =============================================================================
+# BASELINES: Time Series
+# =============================================================================
+arima:
+  # Auto-ARIMA via statsforecast
+  season_length: 12  # monthly data, annual seasonality
+
+timesfm_zeroshot:
+  model_name: "google/timesfm-2.0-500m-pytorch"
+  context_length: 512
+  prediction_length: 128
+  backend: "gpu"  # or "cpu"
+
+timesfm_finetuned:
+  model_name: "google/timesfm-2.0-500m-pytorch"
+  context_length: 512
+  prediction_length: 128
+  finetune_epochs: 10
+  finetune_lr: 1.0e-4
+  finetune_batch_size: 32
+
+deepar:
+  # via GluonTS
+  prediction_length: 6
+  context_length: 12
+  num_layers: 2
+  hidden_size: 40
+  dropout_rate: 0.1
+  epochs: 50
+  batch_size: 64
+  num_batches_per_epoch: 100
+
+# =============================================================================
+# PANELFM: Our Method
+# =============================================================================
+patient_encoder:
+  # XGBoost leaf-node embedding
+  embedding_dim: 8        # After PCA reduction
+  use_leaf_embedding: true
+  use_risk_score: true     # Also pass scalar XGBoost prediction
+  pca_components: 8
+
+panelfm_xreg:
+  # Option A: Use TimesFM XReg with patient embedding as static covariate
+  base_model: "google/timesfm-2.0-500m-pytorch"
+  context_length: 512
+  prediction_length: 128
+
+panelfm_adapter:
+  # Option B: Adapter injection (ChronosX-style)
+  base_model: "google/timesfm-2.0-500m-pytorch"
+  context_length: 512
+  prediction_length: 128
+  adapter_hidden_dim: 32
+  adapter_layers: 2
+  freeze_backbone: true
+  finetune_epochs: 20
+  finetune_lr: 5.0e-4
+  finetune_batch_size: 32
+
+panelfm_icf:
+  # Option C: In-context fine-tuning with similar patients
+  base_model: "google/timesfm-2.0-500m-pytorch"
+  context_length: 512
+  prediction_length: 128
+  n_context_patients: 5     # Number of similar patients as context
+  similarity_metric: "cosine"  # On XGBoost embedding space

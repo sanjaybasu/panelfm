@@ -1,0 +1,20 @@
+{
+  "synthetic_mean": 1773.9822210619966,
+  "synthetic_median": 165.99,
+  "synthetic_std": 7443.625640360151,
+  "synthetic_skew": 9.309083241095498,
+  "synthetic_p95": 6902.428999999986,
+  "synthetic_p99": 32201.43820000002,
+  "synthetic_zero_frac": 4.682524817381532e-06,
+  "synthetic_median_autocorr": -0.05122528655358642,
+  "synthetic_between_var_share": 0.1264108338049352,
+  "real_mean": 1174.6410160725475,
+  "real_median": 226.32,
+  "real_std": 6357.321042980476,
+  "real_skew": 193.5735665469044,
+  "real_p95": 5177.0,
+  "real_p99": 15467.562000000047,
+  "real_zero_frac": 0.02210651203771148,
+  "real_median_autocorr": 0.022031055063002035,
+  "real_between_var_share": 0.1493555782469148
+}
