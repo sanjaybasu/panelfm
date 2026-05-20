@@ -25,11 +25,14 @@ panelfm/
 ├── scripts/
 │   ├── run_experiment.py                # Main pipeline (all 22 models, synthetic + real)
 │   ├── generate_publication_tables.py   # Bootstrap CIs, paired tests, actuarial tables
-│   └── generate_final_figures.py        # Publication figures (initial submission)
+│   ├── generate_figures.py              # Publication figures (Figures 1, 2, 3, S2, S3)
+│   ├── derive_stratified_analyses.py    # Stratified MAE, IBNR sensitivity, R²/PR CIs
+│   ├── derive_rmse.py                   # Analytical RMSE for all 22 models
+│   └── concordance_check.py             # Pre-submission cross-file audit
 ├── src/
 │   ├── data/
 │   │   ├── load_claims.py       # Claims loading, feature engineering, temporal splits
-│   │   └── synthetic_panel.py   # Synthetic panel data generator (Section S1)
+│   │   └── synthetic_panel.py   # Synthetic panel data generator
 │   ├── evaluation/
 │   │   └── metrics.py           # Calibrated R², predictive ratios, decile analysis
 │   ├── models/
@@ -38,13 +41,6 @@ panelfm/
 │   │   ├── timesfm_wrapper.py   # Chronos foundation model + PanelFM conditioning
 │   │   └── patient_encoder.py   # XGBoost leaf-node embeddings + PCA
 │   └── utils/
-├── revision1/
-│   └── code/
-│       ├── README.md
-│       ├── derive_revision_analyses.py   # Stratified MAE, IBNR logic, R²/PR CIs
-│       ├── derive_rmse_for_all_models.py # Analytical RMSE for all 22 models
-│       ├── render_revision_figures.py    # Figures 1, 2, 3, S2, S3 (revised round)
-│       └── concordance_check_pmpm.py     # 9-check pre-submission audit
 ├── requirements.txt
 └── README.md (this file)
 ```
@@ -65,32 +61,25 @@ The experiments require deidentified Medicaid managed care claims data in CSV fo
 
 The deidentified claims used in the published study are not publicly redistributable under the data-use agreement with the participating care management organization; reasonable requests for collaborative re-analysis can be directed to the corresponding author. The synthetic data generator (`src/data/synthetic_panel.py`) requires no external data and produces a complete synthetic panel sufficient to run the full pipeline end-to-end.
 
-### Initial-submission pipeline
+### Full pipeline
 
 ```bash
 # 1. Run all models (synthetic + real data; outputs to ./results/, not committed)
 python scripts/run_experiment.py
 
-# 2. Generate publication tables (bootstrap CIs, statistical tests)
+# 2. Generate publication tables (bootstrap CIs, statistical tests, decile analysis)
 python scripts/generate_publication_tables.py
 
-# 3. Generate initial-submission figures
-python scripts/generate_final_figures.py
+# 3. Derive stratified, RMSE, and IBNR sensitivity analyses
+python scripts/derive_stratified_analyses.py
+python scripts/derive_rmse.py
+
+# 4. Render publication figures
+python scripts/generate_figures.py
+
+# 5. (Optional) Run the pre-submission concordance audit
+python scripts/concordance_check.py
 ```
-
-### Revision pipeline (additional analyses)
-
-```bash
-# After the initial-submission pipeline has produced results/all_metrics_real.json
-# and the decile analysis CSV, the revision analyses derive on top:
-
-python revision1/code/derive_revision_analyses.py
-python revision1/code/derive_rmse_for_all_models.py
-python revision1/code/render_revision_figures.py
-python revision1/code/concordance_check_pmpm.py   # optional pre-submission gate
-```
-
-See `revision1/code/README.md` for a per-script description.
 
 ## Models
 
@@ -109,15 +98,16 @@ See `revision1/code/README.md` for a per-script description.
 Following Society of Actuaries and CMS risk-adjustment standards:
 
 - Mean absolute error (MAE) at the patient × 3-month level
+- Root mean squared error (RMSE) and RMSE-to-MAE ratio
 - Calibrated R² (budget-neutral)
 - Predictive ratio (target 0.90–1.10)
-- Decile analysis
+- Decile analysis (D5–D10 PR plots; D1–D4 raw $ predictions)
 - Cost-censored R² ($250,000 cap)
+- Quantile losses at q=0.50 and q=0.90
 - C-statistic, PPV, and lift for high-cost identification
-- Bootstrap 95% CIs (2,000 patient-level iterations); paired bootstrap pairwise tests (10,000 iterations)
-- RMSE and quantile losses at q=0.50 and q=0.90 (revision; §S8.7)
-- Stratified MAE by zero-cost vs positive-cost stratum (revision; Table S9b)
-- IBNR sensitivity rerun on a mature 3-month window (revision; §S12)
+- Bootstrap 95% CIs (2,000 patient-level iterations); paired bootstrap pairwise tests (10,000 iterations); block-bootstrap and seed-sensitivity validation
+- Stratified MAE by zero-cost vs positive-cost stratum
+- IBNR sensitivity rerun on a mature 3-month claims window
 
 ## Citation
 

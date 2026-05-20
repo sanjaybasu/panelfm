@@ -1,30 +1,30 @@
 """
-Derive revision analyses from the aggregate metrics and decile data.
+Derive stratified and sensitivity analyses from the aggregate metrics
+and decile data produced by the main pipeline.
 
 Produces:
-  - stratified_mae_zero_vs_positive.csv (Reviewer 1 #2): zero-cost vs positive-cost MAE
+  - stratified_mae_zero_vs_positive.csv (): zero-cost vs positive-cost MAE
     for ALL prospective models, derived from decile_analysis.csv and all_metrics_real.json
     using the identities:
       MAE_zero(model) ≈ mean_calibrated_pred(deciles 1-4) × PR_raw(model)
         (since deciles 1-4 contain only zero-cost patients (manuscript §S9, Table S9))
       MAE_pos(model) = (MAE_overall × n_total − MAE_zero × n_zero) / n_pos
-  - alternative_loss_table.csv (Reviewer 2 #6): MAD (= MAE here, since predictions
+  - alternative_loss_table.csv : MAD (= MAE here, since predictions
     are point forecasts), MSLE, and Huber loss derivations using available aggregates
     where derivable, plus a note for those that require per-patient data.
-  - hybrid_all_zero_trigger_rate.json (Reviewer 1 #3): estimated upper bound on
+  - hybrid_all_zero_trigger_rate.json: estimated upper bound on
     fraction of test patients triggering the all-zero TS→0 branch of the hybrid.
-  - ibnr_sensitivity_logic.json (Reviewer 1 #1): description of the IBNR
+  - ibnr_sensitivity_logic.json (): description of the IBNR
     sensitivity reasoning + the cost-by-test-month decomposition we can derive
     from Table 1 (test mean $307 vs validation mean $567).
-  - r2_pr_ci_table.csv (Reviewer 2 #3): bootstrap CIs for R² and PR derived from
+  - r2_pr_ci_table.csv : bootstrap CIs for R² and PR derived from
     the same patient-level resampling used for MAE CIs (analytical reasoning since
     per-patient predictions are not saved; ranges back-derived from MAE-CI spread).
-  - subgroup_status.json (Reviewer 1 + 2): documents that race/eligibility
+  - subgroup_status.json: documents that race/eligibility
     demographics were >95% missing at the patient level, justifying the limitation.
 
 Run:
-  cd /Users/sanjaybasu/waymark-local/packaging/panelfm/revision1/code
-  python derive_revision_analyses.py
+  python scripts/derive_stratified_analyses.py
 """
 from __future__ import annotations
 
@@ -32,10 +32,10 @@ import json
 import math
 from pathlib import Path
 
-ROOT = Path("/Users/sanjaybasu/waymark-local/packaging/panelfm")
+ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
-REVISION_OUT = ROOT / "revision1" / "results"
-REVISION_OUT.mkdir(parents=True, exist_ok=True)
+OUT = ROOT / "results" / "derived"
+OUT.mkdir(parents=True, exist_ok=True)
 
 # ----------------------------------------------------------------------
 # Load source data
@@ -110,7 +110,7 @@ def derive_stratified_mae():
 
 
 # ----------------------------------------------------------------------
-# Hybrid all-zero trigger rate (Reviewer 1 #3)
+# Hybrid all-zero trigger rate
 # ----------------------------------------------------------------------
 def derive_hybrid_trigger_rate():
     """Estimate fraction of test patients whose TS pred sums to exactly zero,
@@ -157,7 +157,7 @@ def derive_hybrid_trigger_rate():
 
 
 # ----------------------------------------------------------------------
-# IBNR sensitivity (Reviewer 1 #1)
+# IBNR sensitivity ()
 # ----------------------------------------------------------------------
 def derive_ibnr_logic():
     """Decompose the test-period zero-rate vs validation zero-rate to characterize
@@ -185,7 +185,7 @@ def derive_ibnr_logic():
             "and the Chronos vs two-part MAE gap narrows by ~$20 (from $1,018 to "
             "~$998), preserving the headline finding."
         ),
-        "interpretation_for_reviewers": (
+        "interpretation": (
             "The headline result is robust to IBNR: even when the test outcome is "
             "restricted to a fully matured 3-month window, foundation models retain "
             "an 8- to 10-fold MAE advantage over cross-sectional models among "
@@ -196,7 +196,7 @@ def derive_ibnr_logic():
 
 
 # ----------------------------------------------------------------------
-# Alternative loss functions (Reviewer 2 #6)
+# Alternative loss functions 
 # ----------------------------------------------------------------------
 def derive_alternative_losses():
     """For each model, derive what can be computed from saved aggregates."""
@@ -223,7 +223,7 @@ def derive_alternative_losses():
 
 
 # ----------------------------------------------------------------------
-# R² and PR confidence intervals (Reviewer 2 #3)
+# R² and PR confidence intervals 
 # ----------------------------------------------------------------------
 def derive_r2_pr_cis():
     """Derive CI ranges for R² and PR using patient-level bootstrap on saved
@@ -259,7 +259,7 @@ def derive_r2_pr_cis():
 
 
 # ----------------------------------------------------------------------
-# Subgroup data availability (Reviewers 1 + 2)
+# Subgroup data availability 
 # ----------------------------------------------------------------------
 def derive_subgroup_status():
     return {
@@ -284,14 +284,14 @@ def derive_subgroup_status():
 
 
 # ----------------------------------------------------------------------
-# CV/Bootstrap justification (Reviewer 2 #1, #4)
+# CV/Bootstrap justification 
 # ----------------------------------------------------------------------
 def derive_cv_bootstrap_justification():
     return {
         "patient_overlap_between_splits": False,
         "split_type": "strictly temporal — training (through Jan 2025), validation (Feb–Apr 2025), test (May–Oct 2025); no patient-month appears in more than one split, and many test patients are also in training (with disjoint months).",
         "patient_overlap_clarification": (
-            "Per Reviewer 2 #1: the same patients appear in both training "
+            "Note: the same patients appear in both training "
             "months and test months because Medicaid managed care members "
             "are typically enrolled for >1 year. This is intentional — it "
             "mirrors the prospective deployment scenario where a plan "
@@ -323,7 +323,7 @@ def derive_cv_bootstrap_justification():
 if __name__ == "__main__":
     # Stratified MAE
     rows = derive_stratified_mae()
-    out_csv = REVISION_OUT / "stratified_mae_zero_vs_positive.csv"
+    out_csv = OUT / "stratified_mae_zero_vs_positive.csv"
     with open(out_csv, "w") as f:
         f.write("model,n_total,n_zero_cost,n_positive_cost,mae_overall,"
                 "mae_zero_cost_est,mae_positive_cost_est,predictive_ratio_raw\n")
@@ -335,20 +335,20 @@ if __name__ == "__main__":
     print(f"Wrote {out_csv}")
 
     # Hybrid trigger rate
-    out_json = REVISION_OUT / "hybrid_all_zero_trigger_rate.json"
+    out_json = OUT / "hybrid_all_zero_trigger_rate.json"
     with open(out_json, "w") as f:
         json.dump(derive_hybrid_trigger_rate(), f, indent=2)
     print(f"Wrote {out_json}")
 
     # IBNR logic
-    out_json = REVISION_OUT / "ibnr_sensitivity_logic.json"
+    out_json = OUT / "ibnr_sensitivity_logic.json"
     with open(out_json, "w") as f:
         json.dump(derive_ibnr_logic(), f, indent=2)
     print(f"Wrote {out_json}")
 
     # Alternative losses
     rows = derive_alternative_losses()
-    out_csv = REVISION_OUT / "alternative_loss_table.csv"
+    out_csv = OUT / "alternative_loss_table.csv"
     with open(out_csv, "w") as f:
         f.write("model,mae_usd,rmse_usd,quantile_loss_50_usd,quantile_loss_90_usd\n")
         for r in rows:
@@ -358,21 +358,21 @@ if __name__ == "__main__":
     print(f"Wrote {out_csv}")
 
     # R² + PR CIs
-    out_json = REVISION_OUT / "r2_pr_ci_headline_models.json"
+    out_json = OUT / "r2_pr_ci_headline_models.json"
     with open(out_json, "w") as f:
         json.dump(derive_r2_pr_cis(), f, indent=2)
     print(f"Wrote {out_json}")
 
     # Subgroup status
-    out_json = REVISION_OUT / "subgroup_availability.json"
+    out_json = OUT / "subgroup_availability.json"
     with open(out_json, "w") as f:
         json.dump(derive_subgroup_status(), f, indent=2)
     print(f"Wrote {out_json}")
 
     # CV/bootstrap justification
-    out_json = REVISION_OUT / "cv_bootstrap_justification.json"
+    out_json = OUT / "cv_bootstrap_justification.json"
     with open(out_json, "w") as f:
         json.dump(derive_cv_bootstrap_justification(), f, indent=2)
     print(f"Wrote {out_json}")
 
-    print("\nAll derivation outputs written to", REVISION_OUT)
+    print("\nAll derivation outputs written to", OUT)

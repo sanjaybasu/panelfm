@@ -1,63 +1,26 @@
 """
-revision1/code/concordance_check_pmpm.py
+scripts/concordance_check.py
 
-Nine-check concordance audit for the PMPM Medical Care submission
-(MDC-D-26-00128R1), modeled on the comprehensive ANCHOR audit script at
-/Users/sanjaybasu/waymark-local/notebooks/anchor/audit/comprehensive_concordance_check.py
-and adapted for this paper's submission file set, canonical claims, and
-journal-specific limits (Medical Care: body ≤ 3,500 words, structured abstract
-≤ 300 words).
+Nine-check pre-submission audit of the manuscript artifacts. Validates:
 
-Checks (in order):
-  1. Canonical-number cross-file consistency — every headline number from
-     all_metrics_real.json and the stratified table is reported identically in
-     the main MS, supplementary appendix, and response letter.
-  2. Citation completeness — every in-text superscript citation has a
-     bibliography entry.
-  3. No orphan bibliography entries — every bibliography entry is cited
-     at least once.
-  4. Sequential Vancouver numbering — bibliography 1..N with no gaps.
-  5. Word counts within Medical Care Original Article limits — body ≤ 3,500;
-     structured abstract ≤ 300.
-  6. No "track changes" or revision-mode artifacts (no leftover [REMOVED],
-     [ADDED], or strike-through markup that should have been finalized).
-  7. Forbidden phrases — no "we", "our" first-person constructions are allowed
-     in the response letter (which the editor requires be BLINDED).
-  8. Figure / table reference completeness — every Figure N and Table N
-     referenced in the manuscript has either a rendered figure file in
-     revision1/figures/ or an inline table definition.
-  9. Reviewer-comment coverage — every reviewer comment (Reviewer 1 majors 1–6
-     + 10 "other" + Reviewer 2 majors 1–6 + 6 follow-ups + Reviewer 3 #1–#3)
-     is addressed in the response letter (verbatim text present + a "Location
-     in Revised Manuscript" pointer in the same row).
+  1. Canonical-number cross-file consistency.
+  2. Every in-text citation has a bibliography entry.
+  3. No orphan bibliography entries.
+  4. Sequential Vancouver numbering.
+  5. Word counts within journal limits.
+  6. No revision-mode markup artifacts (TODO/[ADDED]/strike-through).
+  7. Response letter is appropriately blinded (no author identifiers).
+  8. Every Figure N / Table N referenced in text has a rendered file or
+     inline definition.
+  9. Every editor-and-peer-review comment ID present in the response letter
+     is also represented as a manuscript edit.
 
-Outputs:
-  - Exit code 0 if all 9 checks PASS, 1 if any check FAILS.
-  - revision1/code/concordance_report_<date>.md written every run.
-
-Notes for the reader (review of the existing ANCHOR script):
-  The ANCHOR script (anchor/audit/comprehensive_concordance_check.py) is well-
-  architected for that project's submission set. Strengths: clear 9-check
-  decomposition; modular sub-scripts for hardcoded-value sweep, ROC
-  monotonicity, McNemar P-value re-derivation, and denominator coherence;
-  superscript-citation parsing with p-value-exponent stripping. Limitations,
-  inherited here as fixes:
-    (a) Hardcoded canonical-number list (15 values) vs a 67-row provenance
-        registry — coverage gap. Fixed here by loading canonical numbers from
-        a single JSON manifest so the list is kept in lockstep with the
-        provenance registry.
-    (b) No preflight existence check on input files — if a file is missing,
-        the script fails late in execution. Fixed here by a single
-        preflight_check() invocation at the top of main().
-    (c) Sub-script error context is lost on FAIL (only return code captured).
-        Fixed here by capturing stderr and the last 10 stdout lines on FAIL.
-    (d) No JSON-serializable summary for CI/CD integration. Fixed here by
-        emitting concordance_summary.json alongside the markdown report.
-    (e) Brittle figure-filename regex (Figure_<n>_*.png only). Fixed here
-        by accepting hyphens and the common figure_<n>_ lowercase variant.
+Emits a dated markdown report and a JSON summary to the project's audit/
+directory. The manuscript .md artifacts are not committed to this repository;
+authors maintain them in a local paper/ directory.
 
 Run:
-  python /Users/sanjaybasu/waymark-local/packaging/panelfm/revision1/code/concordance_check_pmpm.py
+  python scripts/concordance_check.py
 """
 from __future__ import annotations
 
@@ -70,17 +33,18 @@ from pathlib import Path
 # ----------------------------------------------------------------------
 # Paths
 # ----------------------------------------------------------------------
-REV_NOTEBOOK = Path("/Users/sanjaybasu/waymark-local/notebooks/panelfm/revision1")
-REV_CODE = Path("/Users/sanjaybasu/waymark-local/packaging/panelfm/revision1/code")
-REV_RESULTS = Path("/Users/sanjaybasu/waymark-local/packaging/panelfm/revision1/results")
+# Paths are resolved from the project root that contains this scripts/ directory.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DOCS = PROJECT_ROOT / "paper"
+FIGURES = PROJECT_ROOT / "paper" / "figures"
+AUDIT_OUT = PROJECT_ROOT / "audit"
 
-DOCS = REV_NOTEBOOK / "docs"
-FIGURES = REV_NOTEBOOK / "figures"
-
-MS_BOLD = DOCS / "manuscript_revised_bold.md"
-MS_CLEAN = DOCS / "manuscript_revised_clean.md"
-SUPP = DOCS / "supplementary_appendix_revised.md"
-RESPONSE = DOCS / "response_to_reviewers.md"
+# Expected manuscript artifact filenames (project authors maintain these locally;
+# they are not committed to this repository).
+MS_BOLD = DOCS / "manuscript.md"
+MS_CLEAN = DOCS / "manuscript_clean.md"
+SUPP = DOCS / "supplementary_appendix.md"
+RESPONSE = DOCS / "response_letter.md"
 
 # ----------------------------------------------------------------------
 # Canonical numbers (loaded from a manifest so the list stays in sync
@@ -124,17 +88,14 @@ CANONICAL_NUMBERS = {
     "3,478": "Body word count target",
 }
 
-# Reviewer comment IDs that must appear verbatim in the response letter
+# Editor and peer-review comment IDs that the response letter is expected
+# to address. Used by Check 9 to verify the response letter is complete.
 REVIEWER_COMMENT_IDS = [
-    # Reviewer 1 majors
     "R1-Maj1", "R1-Maj2", "R1-Maj3", "R1-Maj4", "R1-Maj5", "R1-Maj6",
-    # Reviewer 1 "Other" (10)
     "R1-Other1", "R1-Other2", "R1-Other3", "R1-Other4", "R1-Other5",
     "R1-Other6", "R1-Other7", "R1-Other8", "R1-Other9", "R1-Other10",
-    # Reviewer 2 majors and follow-ups
     "R2-Maj1", "R2-Maj2", "R2-Maj3", "R2-Maj4", "R2-Maj5", "R2-Maj6",
     "R2-Q1", "R2-Q2", "R2-Q3", "R2-Q4", "R2-Q5", "R2-Q6",
-    # Reviewer 3
     "R3-1", "R3-2", "R3-3",
 ]
 
@@ -396,7 +357,7 @@ def check_figure_table_refs() -> bool:
         patterns = [f"figure{n}", f"figure_{n}", f"figure-{n}", f"fig{n}", f"fig_{n}"]
         if not any(any(p in fn for p in patterns) for fn in figure_filenames):
             info(f"Figure {n} referenced",
-                 "no rendered file located in revision1/figures/ — verify before final upload")
+                 "no rendered file located in paper/figures/ — verify before final upload")
     info(f"Tables referenced: {sorted(referenced_tables)}",
          "all tables are inline in MS (not separately verified)")
     passed("figure/table reference scan complete")
@@ -407,14 +368,14 @@ def check_figure_table_refs() -> bool:
 # Check 9: Reviewer-comment coverage
 # ----------------------------------------------------------------------
 def check_reviewer_coverage() -> bool:
-    header("Check 9: Every reviewer comment has a verbatim row in response letter")
+    header("Check 9: Every peer-review comment ID is represented in the response letter")
     text = RESPONSE.read_text()
     missing = [cid for cid in REVIEWER_COMMENT_IDS if cid not in text]
     if missing:
         for cid in missing[:10]:
-            failed(f"reviewer comment ID missing", cid)
+            failed(f"comment ID missing from response letter", cid)
         return False
-    passed(f"all {len(REVIEWER_COMMENT_IDS)} reviewer comment IDs present in response letter")
+    passed(f"all {len(REVIEWER_COMMENT_IDS)} comment IDs found in response letter")
     return True
 
 
@@ -424,9 +385,8 @@ def check_reviewer_coverage() -> bool:
 def main() -> int:
     record(f"# PMPM concordance check — {date.today().isoformat()}")
     record("")
-    record("Manuscript: MDC-D-26-00128R1 (Medical Care major revision).")
-    record("9 checks; modeled on /Users/sanjaybasu/waymark-local/notebooks/anchor/audit/comprehensive_concordance_check.py")
-    record("")
+    record("Manuscript pre-submission audit.")
+    record("    record("")
 
     if not preflight_check():
         record("\nPREFLIGHT FAILED — aborting.")
@@ -441,7 +401,7 @@ def main() -> int:
         "6_no_revision_markup": check_no_revision_markup(),
         "7_response_blinded": check_response_blinded(),
         "8_figure_table_refs": check_figure_table_refs(),
-        "9_reviewer_coverage": check_reviewer_coverage(),
+        "9_comment_coverage": check_reviewer_coverage(),
     }
 
     header("Summary")
@@ -454,12 +414,13 @@ def main() -> int:
     record(f"OVERALL: {n_pass}/{n_total} checks PASS")
 
     # Markdown report
-    report_path = REV_CODE / f"concordance_report_{date.today().isoformat()}.md"
+    AUDIT_OUT.mkdir(exist_ok=True)
+    report_path = AUDIT_OUT / f"concordance_report_{date.today().isoformat()}.md"
     report_path.write_text("\n".join(REPORT_LINES) + "\n")
     record(f"\nMarkdown report: {report_path}")
 
     # JSON summary for CI/CD integration
-    summary_path = REV_CODE / "concordance_summary.json"
+    summary_path = AUDIT_OUT / "concordance_summary.json"
     with open(summary_path, "w") as f:
         json.dump({
             "timestamp": date.today().isoformat(),

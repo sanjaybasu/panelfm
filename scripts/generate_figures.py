@@ -1,5 +1,5 @@
 """
-Final figure renderer for the PMPM revision.
+Figure renderer for the PMPM manuscript (Figures 1, 2, 3, S2, S3).
 
 Design rule (strict): no floating text on plots, no text boxes inside plots.
 All annotations live in the figure caption. Plot elements are limited to:
@@ -27,11 +27,10 @@ import numpy as np
 import pandas as pd
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
-PKG_ROOT = Path("/Users/sanjaybasu/waymark-local/packaging/panelfm")
-NB_ROOT = Path("/Users/sanjaybasu/waymark-local/notebooks/panelfm")
-METRICS_PATH = PKG_ROOT / "results" / "all_metrics_real.json"
-DECILES_PATH = NB_ROOT / "decile_analysis.csv"
-FIG_OUT = NB_ROOT / "revision1" / "figures"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+METRICS_PATH = PROJECT_ROOT / "results" / "all_metrics_real.json"
+DECILES_PATH = PROJECT_ROOT / "results" / "decile_analysis.csv"
+FIG_OUT = PROJECT_ROOT / "paper" / "figures"
 FIG_OUT.mkdir(parents=True, exist_ok=True)
 
 plt.rcParams.update({

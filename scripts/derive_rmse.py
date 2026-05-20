@@ -17,7 +17,7 @@ Also adds the log-MAE analogue when derivable, and the relative penalty
 of switching from MAE to RMSE (which signals outlier sensitivity).
 
 Run:
-  python /Users/sanjaybasu/waymark-local/packaging/panelfm/revision1/code/derive_rmse_for_all_models.py
+  python scripts/derive_rmse.py
 """
 from __future__ import annotations
 
@@ -26,9 +26,9 @@ import json
 import math
 from pathlib import Path
 
-ROOT = Path("/Users/sanjaybasu/waymark-local/packaging/panelfm")
+ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
-OUT = ROOT / "revision1" / "results"
+OUT = ROOT / "results" / "derived"
 
 with open(RESULTS / "all_metrics_real.json") as f:
     M = json.load(f)
