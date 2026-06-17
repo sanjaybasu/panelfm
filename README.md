@@ -116,3 +116,34 @@ If you use this code, please cite the published manuscript (citation will appear
 ## License
 
 See `LICENSE`.
+
+## Revision 2 — member-disjoint validation
+
+The second-round revision re-runs the analysis under a member-disjoint split: the
+member population is partitioned into non-overlapping training (70%), validation
+(15%), and test (15%) sets, so that no member contributes observations to more than
+one set. Mean absolute error is reported per member-month for every model class, and
+calibrated R-squared and the predictive ratio are computed on the patient-level
+three-month total. A gated hybrid uses the foundation model to gate and time costs
+while the cross-sectional model sets the level for members predicted to incur cost.
+
+```
+revision2/code/
+  run_member_disjoint.py   # member-disjoint pipeline (CS, TS, foundation, hybrid, concurrent)
+  chronos_stage.py         # torch-isolated Chronos + panel-conditioned forecasting (subprocess)
+  hybrid_experiments.py    # gated-hybrid gate search across the MAE-discrimination frontier
+  render_figures.py        # figures from the member-disjoint results
+  make_tables.py           # cohort and performance tables
+```
+
+Run:
+
+```bash
+DATA_ROOT=/path/to/real_inputs python revision2/code/run_member_disjoint.py
+# reuse saved Chronos forecasts when iterating on metrics:
+DATA_ROOT=/path/to/real_inputs python revision2/code/run_member_disjoint.py --reuse-forecasts
+```
+
+The torch-based Chronos stage runs in a separate process from the gradient-boosted
+models to avoid an OpenMP runtime conflict on macOS. Results, figures, tables, and
+manuscript text are not committed; they regenerate from the source data.
