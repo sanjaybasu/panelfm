@@ -220,7 +220,7 @@ def render_figure_3():
     plt.close(fig); print("Wrote figure3")
 
 
-def render_figure_s2():
+def render_figure_s1():
     fig, ax = plt.subplots(figsize=(13, 3.6))
     ax.set_xlim(-1, 35); ax.set_ylim(-2.0, 4.2); ax.set_axis_off()
     ax.set_title("Supplementary Figure S2. Member-disjoint design with a prospective forecast window",
@@ -248,12 +248,12 @@ def render_figure_s2():
     ax.text(30.8, 2.925, f"Test\n(n={n_te:,})", ha="center", va="center", fontsize=7)
     fig.tight_layout()
     for ext in ("pdf", "png"):
-        fig.savefig(FIG_OUT / f"figure_s2_temporal_setup.{ext}", bbox_inches="tight",
+        fig.savefig(FIG_OUT / f"figure_s1_temporal_setup.{ext}", bbox_inches="tight",
                     dpi=(200 if ext == "png" else None))
     plt.close(fig); print("Wrote figureS2")
 
 
-def render_figure_s3():
+def render_figure_s5():
     items = sorted(MONTHCOST.items())
     months = [m for m, _ in items]; vals = [v for _, v in items]
     x = np.arange(len(months))
@@ -270,7 +270,7 @@ def render_figure_s3():
     ax.set_ylim(0, max(vals) * 1.18); ax.legend(loc="upper right", fontsize=8.5, framealpha=1.0)
     fig.tight_layout()
     for ext in ("pdf", "png"):
-        fig.savefig(FIG_OUT / f"figure_s3_month_of_incurrence.{ext}", bbox_inches="tight",
+        fig.savefig(FIG_OUT / f"figure_s5_month_of_incurrence.{ext}", bbox_inches="tight",
                     dpi=(200 if ext == "png" else None))
     plt.close(fig); print("Wrote figureS3")
 
@@ -350,7 +350,7 @@ def render_figure_s4():
     plt.close(fig); print("Wrote figureS4")
 
 
-def render_figure_s5():
+def render_figure_s3():
     """MAE vs predictive ratio frontier across the full state-of-the-art panel."""
     rows = _load_sota()
     cats = ["Cross-sectional (mean target)", "Cross-sectional (median target)",
@@ -373,7 +373,7 @@ def render_figure_s5():
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3, fontsize=8, framealpha=1.0)
     fig.subplots_adjust(left=0.10, right=0.97, top=0.92, bottom=0.22)
     for ext in ("pdf", "png"):
-        fig.savefig(FIG_OUT / f"figure_s5_frontier_panel.{ext}", bbox_inches="tight",
+        fig.savefig(FIG_OUT / f"figure_s3_frontier_panel.{ext}", bbox_inches="tight",
                     dpi=(200 if ext == "png" else None))
     plt.close(fig); print("Wrote figureS5")
 
@@ -382,8 +382,8 @@ if __name__ == "__main__":
     render_figure_1()
     render_figure_2()
     render_figure_3()
-    render_figure_s2()
-    render_figure_s3()
-    render_figure_s4()
+    render_figure_s1()
     render_figure_s5()
+    render_figure_s4()
+    render_figure_s3()
     print("All figures rendered to", FIG_OUT)
