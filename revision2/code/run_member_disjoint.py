@@ -76,11 +76,11 @@ warnings.filterwarnings("ignore")
 # -----------------------------------------------------------------------------
 SPLIT_SEED = 20260617
 FRAC_TRAIN, FRAC_VAL, FRAC_TEST = 0.70, 0.15, 0.15
-HORIZON = 3
-TRAIN_CUTOFF = pd.Timestamp("2025-01-01")
-CONTEXT_CUTOFF = pd.Timestamp("2025-04-01")
-TARGET_START = pd.Timestamp("2025-04-01")    # predicts the 3 months after this -> May-Jul 2025
-LOOKBACK_MONTHS = 12
+HORIZON = int(os.environ.get("FM_HORIZON", "3"))
+TRAIN_CUTOFF = pd.Timestamp(os.environ.get("FM_TRAIN_CUTOFF", "2025-01-01"))
+CONTEXT_CUTOFF = pd.Timestamp(os.environ.get("FM_CONTEXT_CUTOFF", "2025-04-01"))
+TARGET_START = pd.Timestamp(os.environ.get("FM_TARGET_START", "2025-04-01"))    # predicts the HORIZON months after this
+LOOKBACK_MONTHS = int(os.environ.get("FM_LOOKBACK_MONTHS", "12"))
 MIN_HISTORY_MONTHS = 6
 MIN_ENROLLED_DAYS = 15
 MIN_TOTAL_MONTHS = 9
@@ -375,7 +375,7 @@ def run_time_series_and_fm(data, cs_ctx, reuse_forecasts=False):
         log(f"  {name:16s} MAE={results[name]['mae']:.1f} R2cal={results[name]['r_squared_calibrated']:.4f} "
             f"PR={results[name]['predictive_ratio']:.3f}")
 
-    wd = OUT_DIR / "_torch_workdir"
+    wd = Path(os.environ.get("FM_WORKDIR", str(OUT_DIR / "_torch_workdir")))
     if not (reuse_forecasts and (wd / "forecasts.joblib").exists()):
         wd.mkdir(parents=True, exist_ok=True)
         union_pids = set(train_ctx_sub) | set(val_ctx) | set(test_ctx)
@@ -647,12 +647,12 @@ def main():
                for m in ["two_part", "chronos_zeroshot", "panelfm_adapter", "hybrid_chronos_zeroshot",
                          "hybrid_gated", "naive_mean3", "stacking", "demographic_glm"] if m in perpatient_all}
 
-    tw = outcomes[(outcomes["month_year"] > TARGET_START) & (outcomes["month_year"] <= pd.Timestamp("2025-10-01"))]
+    tw = outcomes[(outcomes["month_year"] > TARGET_START) & (outcomes["month_year"] <= TARGET_START + pd.DateOffset(months=HORIZON))]
     month_cost = tw.groupby(tw["month_year"].dt.strftime("%Y-%m"))["total_paid"].mean().round(2).to_dict()
 
     split_info = {
-        "design": "member-disjoint (no member in more than one split); prospective May-Jul 2025 3-month target",
-        "metric_scale": "MAE/RMSE are per-member-per-month; R2/PR are on the patient 3-month total",
+        "design": f"member-disjoint (no member in more than one split); prospective {HORIZON}-month target",
+        "metric_scale": f"MAE/RMSE are per-member-per-month; R2/PR are on the patient {HORIZON}-month total",
         "seed": SPLIT_SEED, "fractions": {"train": FRAC_TRAIN, "val": FRAC_VAL, "test": FRAC_TEST},
         "n_members_cohort": int(n_members), "n_patient_months_cohort": int(n_months),
         "zero_cost_month_frac": zero_frac,
@@ -662,7 +662,7 @@ def main():
         "n_test_scored": all_metrics.get("chronos_zeroshot", {}).get("n_patients"),
         "hybrid_calibration_factor_from_validation": cs_factor,
         "train_cutoff": str(TRAIN_CUTOFF.date()), "context_cutoff": str(CONTEXT_CUTOFF.date()),
-        "target_window": "2025-05 to 2025-07",
+        "target_window": f"{(TARGET_START + pd.DateOffset(months=1)).strftime('%Y-%m')} to {(TARGET_START + pd.DateOffset(months=HORIZON)).strftime('%Y-%m')}",
     }
 
     def jsonable(o):
@@ -687,7 +687,7 @@ def main():
     pp_save["high_cost_label"] = {pid: int(v >= hc_thr) for pid, v in pp_save["actual_total"].items()}
     pp_save["high_cost_threshold"] = hc_thr
 
-    tag = "quick" if args.quick else ("temporal" if args.temporal else "disjoint")
+    tag = os.environ.get("FM_TAG") or ("quick" if args.quick else ("temporal" if args.temporal else "disjoint"))
     (OUT_DIR / f"per_patient_test_{tag}.json").write_text(json.dumps(jsonable(pp_save)))
     (OUT_DIR / f"all_metrics_{tag}.json").write_text(json.dumps(jsonable(all_metrics), indent=2))
     (OUT_DIR / f"split_info_{tag}.json").write_text(json.dumps(jsonable(split_info), indent=2))

@@ -2,14 +2,16 @@
 """
 Build the Word deliverables for the second revision from the markdown sources.
 
-Produces, in notebooks/panelfm/revision2/docs/:
-  manuscript_clean.docx            final text, no markup (for reading)
-  manuscript_bold.docx             final text with new/moved text in **bold** (journal submission)
-  manuscript_tracked_changes.docx  genuine Word redline (R1 -> R2) via w:ins / w:del
-  supplementary_appendix.docx      clean appendix
-  response_to_reviewers.docx       blinded response letter
+Produces, in notebooks/panelfm/revision2/docs/ (all names prefixed panelfm_medicalcare_):
+  ..._manuscript_clean.docx            final text, no markup (for reading)
+  ..._manuscript_bold.docx             final text with new/moved text in **bold** (journal submission)
+  ..._manuscript_tracked_changes.docx  genuine Word redline (R1 -> R2) via w:ins / w:del
+  ..._supplementary_appendix.docx      clean appendix
+  ..._response_to_reviewers.docx       blinded response letter
+  ..._title_page.docx                  unblinded title page
+  ..._cover_letter.docx                cover letter (optional Editorial Manager field)
 
-The bold source (manuscript_bold.md) marks revised passages with **...**. The clean
+The bold source (..._manuscript_bold.md) marks revised passages with **...**. The clean
 source is the bold source with markup stripped. The tracked-changes redline is a
 paragraph-aligned word-level diff of the R1 clean manuscript against the R2 clean
 manuscript, rendered as Word insertions and deletions.
@@ -26,6 +28,7 @@ from pathlib import Path
 
 NB = Path(__file__).resolve().parents[4] / "notebooks" / "panelfm"
 DOCS = NB / "revision2" / "docs"
+STEM = "panelfm_medicalcare_"  # descriptive topic_venue prefix for all deliverables
 R1_CLEAN = NB / "revision1" / "docs" / "manuscript_blinded_clean.md"
 REF = Path.home() / ".claude" / "templates" / "sanjay_paper_reference.docx"
 
@@ -37,6 +40,8 @@ def strip_bold(text: str) -> str:
 
 def pandoc(md_path: Path, docx_path: Path):
     cmd = ["pandoc", str(md_path), "--from=markdown", "--to=docx", "-o", str(docx_path)]
+    # Resolve embedded image paths (e.g. figures/...) relative to the revision2 dir.
+    cmd.append(f"--resource-path={DOCS.parent}")
     if REF.exists():
         cmd.append(f"--reference-doc={REF}")
     subprocess.run(cmd, check=True)
@@ -117,31 +122,26 @@ def build_tracked_changes(r1_md_path: Path, r2_clean_md_path: Path, out_path: Pa
 
 
 def main():
-    bold_md = DOCS / "manuscript_bold.md"
+    bold_md = DOCS / f"{STEM}manuscript_bold.md"
     if not bold_md.exists():
         print(f"ERROR: {bold_md} not found", file=sys.stderr); sys.exit(1)
     bold_text = bold_md.read_text()
     clean_text = strip_bold(bold_text)
-    clean_md = DOCS / "manuscript_clean.md"
+    clean_md = DOCS / f"{STEM}manuscript_clean.md"
     clean_md.write_text(clean_text)
 
     print("Building manuscript docx...")
-    pandoc(bold_md, DOCS / "manuscript_bold.docx")
-    pandoc(clean_md, DOCS / "manuscript_clean.docx")
+    pandoc(bold_md, DOCS / f"{STEM}manuscript_bold.docx")
+    pandoc(clean_md, DOCS / f"{STEM}manuscript_clean.docx")
 
-    appx = DOCS / "supplementary_appendix.md"
-    if appx.exists():
-        pandoc(appx, DOCS / "supplementary_appendix.docx")
-    resp = DOCS / "response_to_reviewers.md"
-    if resp.exists():
-        pandoc(resp, DOCS / "response_to_reviewers.docx")
-    title = DOCS / "title_page.md"
-    if title.exists():
-        pandoc(title, DOCS / "title_page.docx")
+    for stem in ("supplementary_appendix", "response_to_reviewers", "title_page", "cover_letter"):
+        src = DOCS / f"{STEM}{stem}.md"
+        if src.exists():
+            pandoc(src, DOCS / f"{STEM}{stem}.docx")
 
     print("Building tracked-changes redline...")
     if R1_CLEAN.exists():
-        build_tracked_changes(R1_CLEAN, clean_md, DOCS / "manuscript_tracked_changes.docx")
+        build_tracked_changes(R1_CLEAN, clean_md, DOCS / f"{STEM}manuscript_tracked_changes.docx")
     else:
         print(f"  WARNING: {R1_CLEAN} not found; skipping redline")
 

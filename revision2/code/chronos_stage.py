@@ -38,7 +38,7 @@ sys.path.insert(0, str(PKG_ROOT))
 
 from src.models.timesfm_wrapper import ChronosForecaster, PanelFMXReg, PanelFMAdapter
 
-HORIZON = 3
+HORIZON = int(os.environ.get("FM_HORIZON", "3"))
 
 
 class DictEmbeddingStore:

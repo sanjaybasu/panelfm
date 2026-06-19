@@ -14,10 +14,11 @@ PKG = Path(__file__).resolve().parents[2]
 NB = Path(__file__).resolve().parents[4] / "notebooks" / "panelfm" / "revision2"
 RES = PKG / "revision2" / "results"
 
+STEM = "panelfm_medicalcare_"  # descriptive topic_venue prefix for all deliverables
 DOCS = {
-    "manuscript": NB / "docs" / "manuscript_bold.md",
-    "appendix": NB / "docs" / "supplementary_appendix.md",
-    "response": NB / "docs" / "response_to_reviewers.md",
+    "manuscript": NB / "docs" / f"{STEM}manuscript_bold.md",
+    "appendix": NB / "docs" / f"{STEM}supplementary_appendix.md",
+    "response": NB / "docs" / f"{STEM}response_to_reviewers.md",
 }
 TEXT = {k: p.read_text() for k, p in DOCS.items() if p.exists()}
 ALLTEXT = "\n".join(TEXT.values())
@@ -107,6 +108,19 @@ def approx_in(val, txt, tol=0.6):
 assert abs(m["chronos_zeroshot"]["mae"] - 448.0) < 1, "chronos MAE drift"
 assert abs(m["hybrid_gated"]["mae"] - 510.9) < 1, "gated MAE drift"
 assert sp["n_test_members"] == 8604, "test n drift"
+
+# --- 12-month-horizon sensitivity (CY2024 -> CY2025); validated against all_metrics_12mo.json ---
+if (RES / "all_metrics_12mo.json").exists():
+    m12 = json.loads((RES / "all_metrics_12mo.json").read_text())
+    sp12 = json.loads((RES / "split_info_12mo.json").read_text())
+    assert abs(m12["chronos_zeroshot"]["mae"] - 531.0) < 1.5, "12mo chronos MAE drift"
+    assert abs(m12["random_forest"]["r_squared_calibrated"] - 0.409) < 0.01, "12mo RF R2cal drift"
+    assert sp12["n_test_members"] == 5025 and sp12["n_eligible_members"] == 33484, "12mo n drift"
+    want("12mo chronos MAE+CI", "531 (486–580)", where="appendix")
+    want("12mo RF R2cal+CI", "0.41 (0.34 to 0.48)", where="appendix")
+    want("12mo eligible n", "33,484", where="appendix")
+    want("12mo RF in Results", "random forest calibrated R² 0.41", where="manuscript")
+    want("12mo Table S13 ref", "Table S13", where="appendix")
 
 # --- Stale prior-version numbers that must NOT appear ---
 forbid("old 76% reduction", "76%", allow=("response",))
