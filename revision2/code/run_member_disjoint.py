@@ -157,7 +157,16 @@ def member_disjoint_split(members_with_cost):
     return {"train": train_ids, "val": val_ids, "test": test_ids}
 
 
-def prepare(outcomes, attributes, eligibility, quick=None):
+def temporal_split(eligible, outcomes):
+    """Non-random temporal (entry-cohort) split per Steyerberg 17.3: earliest-entry members
+    to train, most-recent-entry members to test. Entry = each member's first observed month."""
+    entry = outcomes.groupby("person_id")["month_year"].min()
+    e = sorted(eligible, key=lambda p: (entry.get(p, pd.Timestamp.max), p))
+    n = len(e); n_tr = int(round(n * FRAC_TRAIN)); n_va = int(round(n * FRAC_VAL))
+    return {"train": set(e[:n_tr]), "val": set(e[n_tr:n_tr + n_va]), "test": set(e[n_tr + n_va:])}
+
+
+def prepare(outcomes, attributes, eligibility, quick=None, temporal=False):
     if quick:
         rng0 = np.random.default_rng(SPLIT_SEED)
         members = outcomes["person_id"].unique()
@@ -198,8 +207,12 @@ def prepare(outcomes, attributes, eligibility, quick=None):
     if quick:
         eligible = set(eligible)
         mwc = mwc[mwc["person_id"].isin(eligible)].reset_index(drop=True)
-    splits = member_disjoint_split(mwc)
-    log(f"Disjoint split: train={len(splits['train']):,} val={len(splits['val']):,} test={len(splits['test']):,}")
+    if temporal:
+        splits = temporal_split(list(mwc["person_id"]), outcomes)
+        log(f"TEMPORAL entry-cohort split: train={len(splits['train']):,} val={len(splits['val']):,} test={len(splits['test']):,}")
+    else:
+        splits = member_disjoint_split(mwc)
+        log(f"Disjoint split: train={len(splits['train']):,} val={len(splits['val']):,} test={len(splits['test']):,}")
     return {"feats": feats, "targets": targets, "context": context, "actuals": actuals,
             "splits": splits, "outcomes": outcomes}
 
@@ -298,6 +311,38 @@ def run_cross_sectional(data):
     log(f"  {'stacking':16s} MAE={results['stacking']['mae']:.1f} "
         f"R2cal={results['stacking']['r_squared_calibrated']:.4f} PR={results['stacking']['predictive_ratio']:.3f}")
 
+    # Tweedie gradient boosting: the principled single-model approach for zero-inflated,
+    # right-skewed cost (compound Poisson-gamma); targets the conditional mean.
+    import xgboost as xgb
+    tw = xgb.XGBRegressor(objective="reg:tweedie", tweedie_variance_power=1.5,
+                          n_estimators=500, max_depth=6, learning_rate=0.05, subsample=0.8,
+                          colsample_bytree=0.8, min_child_weight=10, reg_alpha=0.1, reg_lambda=1.0,
+                          random_state=42, n_jobs=-1)
+    tw.fit(Xtr.values, ytr)
+    total_te = {pid: max(float(v), 0.0) for pid, v in zip(te_ids, tw.predict(Xte.values))}
+    pred3 = flat3(total_te, act3)
+    results["tweedie"] = eval3(pred3, act3)
+    perpatient["tweedie"] = {"pred3": pred3, "act3": act3}
+    fitted["tweedie"] = tw
+    log(f"  {'tweedie':16s} MAE={results['tweedie']['mae']:.1f} "
+        f"R2cal={results['tweedie']['r_squared_calibrated']:.4f} PR={results['tweedie']['predictive_ratio']:.3f}")
+
+    # Quantile gradient boosting at the conditional median: a cross-sectional model that, like
+    # the foundation model, targets the median rather than the mean, isolating the loss-function
+    # (median-vs-mean) origin of the MAE/calibration trade-off within one model class.
+    import lightgbm as lgb
+    qm = lgb.LGBMRegressor(objective="quantile", alpha=0.5, n_estimators=500, max_depth=6,
+                           learning_rate=0.05, subsample=0.8, colsample_bytree=0.8,
+                           min_child_samples=20, reg_alpha=0.1, reg_lambda=1.0, random_state=42,
+                           n_jobs=-1, verbose=-1)
+    qm.fit(Xtr.values, ytr)
+    total_te = {pid: max(float(v), 0.0) for pid, v in zip(te_ids, qm.predict(Xte.values))}
+    pred3 = flat3(total_te, act3)
+    results["quantile_median_cs"] = eval3(pred3, act3)
+    perpatient["quantile_median_cs"] = {"pred3": pred3, "act3": act3}
+    log(f"  {'quantile_median':16s} MAE={results['quantile_median_cs']['mae']:.1f} "
+        f"R2cal={results['quantile_median_cs']['r_squared_calibrated']:.4f} PR={results['quantile_median_cs']['predictive_ratio']:.3f}")
+
     ctx = {"test_ids": te_ids, "fitted": fitted, "Xtr": Xtr, "fcols": fcols, "perpatient": perpatient}
     return results, ctx
 
@@ -335,6 +380,8 @@ def run_time_series_and_fm(data, cs_ctx, reuse_forecasts=False):
         wd.mkdir(parents=True, exist_ok=True)
         union_pids = set(train_ctx_sub) | set(val_ctx) | set(test_ctx)
         joblib.dump({p: context[p] for p in union_pids}, wd / "context.joblib")
+        joblib.dump({p: np.asarray(actuals[p], dtype=np.float32) for p in union_pids if p in actuals},
+                    wd / "actuals.joblib")
         (wd / "ids.json").write_text(json.dumps({
             "train_sub": list(train_ctx_sub), "val": list(val_ctx), "test": list(test_ctx)}))
         from src.models.patient_encoder import PatientEncoder, PatientEmbeddingStore
@@ -557,10 +604,12 @@ def main():
     ap.add_argument("--quick", type=int, default=None)
     ap.add_argument("--reuse-forecasts", action="store_true",
                     help="reuse existing forecasts.joblib instead of re-running the torch stage")
+    ap.add_argument("--temporal", action="store_true",
+                    help="use a non-random temporal entry-cohort split (Steyerberg 17.3) instead of random")
     args = ap.parse_args()
 
     outcomes, attributes, eligibility = load_cohort()
-    data = prepare(outcomes, attributes, eligibility, quick=args.quick)
+    data = prepare(outcomes, attributes, eligibility, quick=args.quick, temporal=args.temporal)
     n_members = outcomes["person_id"].nunique()
     n_months = outcomes.shape[0]
     zero_frac = float((outcomes["total_paid"] == 0).mean())
@@ -586,6 +635,7 @@ def main():
     ci = {}
     for model in ["chronos_zeroshot", "naive_mean3", "panelfm_adapter", "two_part", "stacking",
                   "random_forest", "xgboost", "lightgbm", "demographic_glm", "naive_last",
+                  "tweedie", "quantile_median_cs",
                   "hybrid_chronos_zeroshot", "hybrid_panelfm_adapter", "hybrid_naive_mean3", "hybrid_gated"]:
         if model in perpatient_all:
             ci[model] = bootstrap_ci(perpatient_all[model]["pred3"], perpatient_all[model]["act3"])
@@ -626,7 +676,19 @@ def main():
             return int(o)
         return o
 
-    tag = "quick" if args.quick else "disjoint"
+    # Per-patient test predictions (3-month totals) + actuals + high-cost label, for the
+    # downstream decision-curve / net-benefit / recalibration analyses across all models.
+    pp_save = {"actual_total": {}, "models": {}}
+    for mname, d in perpatient_all.items():
+        pp_save["models"][mname] = {pid: float(np.sum(d["pred3"][pid])) for pid in d["pred3"]}
+        for pid in d["act3"]:
+            pp_save["actual_total"][pid] = float(np.sum(d["act3"][pid]))
+    hc_thr = float(np.quantile(list(pp_save["actual_total"].values()), 0.90)) if pp_save["actual_total"] else 0.0
+    pp_save["high_cost_label"] = {pid: int(v >= hc_thr) for pid, v in pp_save["actual_total"].items()}
+    pp_save["high_cost_threshold"] = hc_thr
+
+    tag = "quick" if args.quick else ("temporal" if args.temporal else "disjoint")
+    (OUT_DIR / f"per_patient_test_{tag}.json").write_text(json.dumps(jsonable(pp_save)))
     (OUT_DIR / f"all_metrics_{tag}.json").write_text(json.dumps(jsonable(all_metrics), indent=2))
     (OUT_DIR / f"split_info_{tag}.json").write_text(json.dumps(jsonable(split_info), indent=2))
     (OUT_DIR / f"bootstrap_ci_{tag}.json").write_text(json.dumps(jsonable(ci), indent=2))

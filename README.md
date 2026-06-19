@@ -41,9 +41,26 @@ panelfm/
 │   │   ├── timesfm_wrapper.py   # Chronos foundation model + PanelFM conditioning
 │   │   └── patient_encoder.py   # XGBoost leaf-node embeddings + PCA
 │   └── utils/
+├── revision2/
+│   └── code/                        # Second revision: member-disjoint validation + SOTA panel
+│       ├── run_member_disjoint.py       # Member-disjoint train/val/test split; all model classes
+│       ├── decision_analysis.py         # Cost-captured, decision-curve net benefit, recalibration, paired tests
+│       ├── modal_tsfm.py                # GPU foundation-model panel (Chronos sizes/Bolt, TimesFM-2.5, TabPFN-v2)
+│       ├── tabpfn_run.py                # TabPFN-v2 tabular foundation model (cross-sectional task)
+│       ├── tsfm_extra.py                # Additional time-series foundation models (CPU)
+│       ├── chronos_stage.py             # Torch-isolated Chronos forecasting stage
+│       ├── hybrid_experiments.py        # Gated-hybrid gate search
+│       ├── make_tables.py               # Editable Word tables from results JSON
+│       ├── render_figures.py            # Member-disjoint, decision-curve, and frontier figures
+│       ├── make_docx.py                 # Manuscript/appendix/response document build
+│       └── consistency_check.py         # Cross-document numeric consistency audit
 ├── requirements.txt
 └── README.md (this file)
 ```
+
+## Second revision (member-disjoint validation)
+
+The `revision2/code/` directory holds the second-revision pipeline. It partitions members into disjoint training, validation, and test sets (no member in more than one set) with a common prospective forecast window, extends the model set with a foundation-model panel (Chronos-T5 Small/Base/Large, Chronos-Bolt, TimesFM-2.5) and a tabular foundation model (TabPFN-v2), and adds Tweedie and quantile (median-targeting) gradient-boosted models, decision-curve analysis, post-hoc recalibration, and an entry-cohort temporal-split sensitivity analysis. `run_member_disjoint.py` writes result JSON files to `revision2/results/` (not committed); the remaining scripts consume those outputs.
 
 ## Reproducing the analyses
 

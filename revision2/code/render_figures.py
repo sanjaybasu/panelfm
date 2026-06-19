@@ -23,7 +23,7 @@ from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
 RES = PKG_ROOT / "revision2" / "results"
-FIG_OUT = PKG_ROOT / "revision2" / "figures"
+FIG_OUT = Path(__file__).resolve().parents[4] / "notebooks" / "panelfm" / "revision2" / "figures"
 FIG_OUT.mkdir(parents=True, exist_ok=True)
 
 METRICS = json.loads((RES / "all_metrics_disjoint.json").read_text())
@@ -275,10 +275,115 @@ def render_figure_s3():
     plt.close(fig); print("Wrote figureS3")
 
 
+def _load_sota():
+    """Merge the core, TSFM, and TabPFN metric files into one dict with category tags
+    for the frontier figure. Returns list of (label, mae, pr, r2cal, category)."""
+    tsfm = json.loads((RES / "all_metrics_tsfm.json").read_text()) if (RES / "all_metrics_tsfm.json").exists() else {}
+    tab = json.loads((RES / "all_metrics_tabpfn.json").read_text()) if (RES / "all_metrics_tabpfn.json").exists() else {}
+    rows = []
+
+    def add(key, src, label, cat):
+        if key in src and "mae" in src[key]:
+            v = src[key]
+            rows.append((label, v["mae"], v.get("predictive_ratio", np.nan),
+                         v.get("r_squared_calibrated", np.nan), cat))
+    # Cross-sectional gradient-boosted and actuarial baselines.
+    for k, lab in [("two_part", "Two-part"), ("stacking", "Stacking"), ("random_forest", "Random forest"),
+                   ("tweedie", "Tweedie GBM")]:
+        add(k, METRICS, lab, "Cross-sectional (mean target)")
+    add("quantile_median_cs", METRICS, "Quantile-median GBM", "Cross-sectional (median target)")
+    add("naive_mean3", METRICS, "Naive mean", "Classical time series")
+    # Time series foundation models.
+    add("chronos_zeroshot", METRICS, "Chronos-small", "TS foundation (median)")
+    for k, lab in [("chronos_t5_base_median", "Chronos-base"), ("chronos_t5_large_median", "Chronos-large"),
+                   ("chronos_bolt_base_median", "Chronos-Bolt")]:
+        add(k, tsfm, lab, "TS foundation (median)")
+    add("timesfm_2p5", tsfm, "TimesFM-2.5", "TS foundation (median)")
+    # Tabular foundation model.
+    add("tabpfn_regressor", tab, "TabPFN-v2", "Tabular foundation (mean)")
+    # Concurrent upper bound.
+    add("concurrent_lightgbm", METRICS, "Concurrent LightGBM", "Concurrent (reference)")
+    return rows
+
+
+def render_figure_s4():
+    """Decision-relevant evaluation: cost captured at capacity, and net-benefit (DCA)."""
+    da = json.loads((RES / "decision_analysis.json").read_text())
+    fig, (axA, axB) = plt.subplots(1, 2, figsize=(13, 4.8), gridspec_kw={"width_ratios": [1.0, 1.0]})
+    show = {"two_part": ("Two-part hurdle", "#1f77b4"),
+            "tweedie": ("Tweedie GBM", "#9467bd"),
+            "timesfm_2p5": ("TimesFM-2.5", "#d62728"),
+            "tabpfn_regressor": ("TabPFN-v2", "#8c564b"),
+            "naive_mean3": ("Naive trailing mean", "#ff7f0e")}
+    caps = [5, 10, 15, 20]
+    for m, (lab, color) in show.items():
+        cc = da["cost_captured"].get(m)
+        if not cc:
+            continue
+        ys = [cc[f"cap_{c}pct"]["cost_captured_frac"] * 100 for c in caps]
+        axA.plot(caps, ys, "o-", color=color, label=lab, linewidth=1.8, markersize=6)
+    axA.plot(caps, caps, "k--", linewidth=0.9, alpha=0.6, label="Random targeting")
+    axA.set_xlabel("Care-management capacity (% of members enrolled)")
+    axA.set_ylabel("Realized cost captured (%)")
+    axA.set_title("A. Cost captured at capacity", loc="left", fontweight="bold")
+    axA.set_xticks(caps); axA.legend(loc="lower right", fontsize=8, framealpha=1.0)
+
+    thr = [0.05, 0.10, 0.15, 0.20, 0.30]
+    for m, (lab, color) in show.items():
+        nb = da["net_benefit"].get(m)
+        if not nb:
+            continue
+        ys = [nb[f"pt_{t:.2f}"] for t in thr]
+        axB.plot([t * 100 for t in thr], ys, "o-", color=color, label=lab, linewidth=1.8, markersize=6)
+    ta = da["net_benefit"]["_treat_all"]
+    axB.plot([t * 100 for t in thr], [ta[f"pt_{t:.2f}"] for t in thr], color="#555555",
+             linestyle="--", linewidth=1.2, label="Enroll all")
+    axB.axhline(0, color="black", linewidth=0.9, linestyle=":", alpha=0.7, label="Enroll none")
+    axB.set_xlabel("Threshold probability of high cost (%)")
+    axB.set_ylabel("Net benefit")
+    axB.set_title("B. Decision-curve analysis (net benefit)", loc="left", fontweight="bold")
+    axB.legend(loc="upper right", fontsize=8, framealpha=1.0)
+    fig.subplots_adjust(left=0.07, right=0.97, top=0.92, bottom=0.14)
+    for ext in ("pdf", "png"):
+        fig.savefig(FIG_OUT / f"figure_s4_decision_curves.{ext}", bbox_inches="tight",
+                    dpi=(200 if ext == "png" else None))
+    plt.close(fig); print("Wrote figureS4")
+
+
+def render_figure_s5():
+    """MAE vs predictive ratio frontier across the full state-of-the-art panel."""
+    rows = _load_sota()
+    cats = ["Cross-sectional (mean target)", "Cross-sectional (median target)",
+            "Classical time series", "TS foundation (median)", "Tabular foundation (mean)", "Concurrent (reference)"]
+    colors = {"Cross-sectional (mean target)": "#1f77b4", "Cross-sectional (median target)": "#17becf",
+              "Classical time series": "#7f7f7f", "TS foundation (median)": "#d62728",
+              "Tabular foundation (mean)": "#8c564b", "Concurrent (reference)": "#c75ba1"}
+    fig, ax = plt.subplots(figsize=(9.5, 6.2))
+    ax.axhline(1.0, color="black", linewidth=0.9, linestyle="--", alpha=0.7, zorder=2)
+    ax.axhspan(0.9, 1.1, color="#cccccc", alpha=0.18, zorder=1)
+    for c in cats:
+        xs = [r[1] for r in rows if r[4] == c]; ys = [r[2] for r in rows if r[4] == c]
+        ax.scatter(xs, ys, s=130, color=colors[c], edgecolor="white", linewidth=1.0, label=c, zorder=3)
+    for lab, mae, pr, r2, c in rows:
+        ax.annotate(lab, (mae, pr), textcoords="offset points", xytext=(6, 4), fontsize=7.5, zorder=4)
+    ax.set_xlabel("MAE ($/member-month)"); ax.set_ylabel("Predictive ratio (predicted / actual, log scale)")
+    ax.set_yscale("log")
+    ax.set_title("Supplementary Figure S5. Forecasting accuracy vs calibration across the model panel",
+                 loc="left", fontweight="bold", fontsize=11, pad=10)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3, fontsize=8, framealpha=1.0)
+    fig.subplots_adjust(left=0.10, right=0.97, top=0.92, bottom=0.22)
+    for ext in ("pdf", "png"):
+        fig.savefig(FIG_OUT / f"figure_s5_frontier_panel.{ext}", bbox_inches="tight",
+                    dpi=(200 if ext == "png" else None))
+    plt.close(fig); print("Wrote figureS5")
+
+
 if __name__ == "__main__":
     render_figure_1()
     render_figure_2()
     render_figure_3()
     render_figure_s2()
     render_figure_s3()
+    render_figure_s4()
+    render_figure_s5()
     print("All figures rendered to", FIG_OUT)

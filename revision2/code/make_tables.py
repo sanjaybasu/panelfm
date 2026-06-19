@@ -20,7 +20,7 @@ import run_member_disjoint as R
 import docx
 from docx.shared import Pt
 
-NB_TABLES = R.PKG_ROOT / "revision2" / "tables"
+NB_TABLES = Path(__file__).resolve().parents[4] / "notebooks" / "panelfm" / "revision2" / "tables"
 NB_TABLES.mkdir(parents=True, exist_ok=True)
 RES = R.OUT_DIR
 
@@ -139,10 +139,10 @@ def build_table2():
                 cells[j].text = v
 
     doc.add_paragraph(
-        "MAE and RMSE are per member-month; calibrated R² and the predictive ratio are computed on the "
+        "MAE is per member-month; calibrated R² and the predictive ratio are computed on the "
         "patient three-month total. 95% confidence intervals are from 2,000-iteration member-level bootstrap "
-        "resampling. The gated hybrid attains the lowest MAE among models with positive between-member "
-        "discrimination. Concurrent models use same-period features and represent an explanatory ceiling, not "
+        "resampling. The gated hybrid attains lower MAE than the mean-targeting cross-sectional models while "
+        "retaining positive between-member discrimination. Concurrent models use same-period features and represent an explanatory ceiling, not "
         "prospective forecasting performance.")
     doc.save(str(NB_TABLES / "table2_performance.docx"))
     print("wrote table2_performance.docx")
