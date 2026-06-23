@@ -172,14 +172,19 @@ def render_figure_2():
     # Panels C (3-month) and D (12-month): raw $ predictions in the lowest-cost deciles.
     def _lowcost_panel(ax, src, deciles, horizon, xlabel):
         x = np.arange(len(deciles)); n = len(models_cal); bw = 0.85 / n
+        def _fmt(v):
+            return f"${v/1000:.1f}k" if v >= 1000 else f"${v:.0f}"
         for i, (m, (lab, color)) in enumerate(models_cal.items()):
             if m not in src:
                 continue
             vals = [src[m].get(f"decile_{d}", {}).get("pred_mean", 0) for d in deciles]
-            ax.bar(x + (i - (n - 1) / 2) * bw, vals, width=bw, color=color, label=lab, edgecolor="white", linewidth=0.4)
+            bars = ax.bar(x + (i - (n - 1) / 2) * bw, vals, width=bw, color=color, label=lab, edgecolor="white", linewidth=0.4)
+            # Label every bar so the foundation model's near-zero predictions are legible (not mistaken for missing).
+            ax.bar_label(bars, labels=[_fmt(v) for v in vals], padding=2, fontsize=5.5, rotation=90)
         ax.set_xticks(x); ax.set_xticklabels([f"D{d}" for d in deciles])
         ax.set_xlabel(xlabel)
         ax.set_ylabel(f"Mean predicted {horizon} cost ($)")
+        ax.margins(y=0.20)  # headroom so rotated value labels are not clipped
 
     # Three-month: deciles where actual cost is all $0.
     zero_deciles = [i for i in range(1, 11)
