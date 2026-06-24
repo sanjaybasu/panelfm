@@ -92,8 +92,8 @@ want("Tweedie reference 23", "Zhou H, Qian W, Yang Y", where="manuscript")
 want("TabPFN reference 24", "Hollmann N", where="manuscript")
 want("DCA reference 25", "Vickers AJ, Elkin EB", where="manuscript")
 want("CRPS reference 26", "Gneiting T, Raftery AE", where="manuscript")
-want("supp table S11", "Table S11")
-want("supp table S12", "Table S12")
+want("supp table S6 (panel)", "Table S6")
+want("supp table S10 (panel pairwise)", "Table S10")
 want("supp figure S5", "Figure S5")
 
 # Forbid the superseded subset-based gated-hybrid / chronos numbers (full-set canonical is 511 / −1.11)
@@ -120,7 +120,7 @@ if (RES / "all_metrics_12mo.json").exists():
     want("12mo RF R2cal+CI", "0.41 (0.34 to 0.48)", where="appendix")
     want("12mo eligible n", "33,484", where="appendix")
     want("12mo RF in Results", "random forest calibrated R² 0.41", where="manuscript")
-    want("12mo Table S13 ref", "Table S13", where="appendix")
+    want("12mo Table S7 ref", "Table S7", where="appendix")
 
 # --- Stale prior-version numbers that must NOT appear ---
 forbid("old 76% reduction", "76%", allow=("response",))
